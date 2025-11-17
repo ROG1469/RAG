@@ -62,7 +62,7 @@ npx supabase link --project-ref jpyacjqxlppfawvobfds
 
 ### Step 4: Set Secret
 ```powershell
-npx supabase secrets set GEMINI_API_KEY=AIzaSyADgj69nrmSsC4Ze191f-tJ2pAMBtNxt14
+npx supabase secrets set GEMINI_API_KEY=AIzaSyCTX5kDfnnCJZ7O-JYc-6zMJGB8oAX2R-I
 ```
 
 ### Step 5: Deploy

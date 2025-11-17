@@ -29,7 +29,7 @@ supabase functions deploy process-document
 
 ### Step 2: Verify API Key Secret is Set
 ```powershell
-supabase secrets set GEMINI_API_KEY=AIzaSyADgj69nrmSsC4Ze191f-tJ2pAMBtNxt14
+supabase secrets set GEMINI_API_KEY=AIzaSyCTX5kDfnnCJZ7O-JYc-6zMJGB8oAX2R-I
 ```
 
 ### Step 3: Test the Fix
@@ -51,7 +51,7 @@ supabase secrets set GEMINI_API_KEY=AIzaSyADgj69nrmSsC4Ze191f-tJ2pAMBtNxt14
 ### Still Getting "GoogleGenerativeAI is not defined"?
 1. Verify secret is set: `supabase secrets list`
 2. Should see: `GEMINI_API_KEY`
-3. If not there, run: `supabase secrets set GEMINI_API_KEY=AIzaSyADgj69nrmSsC4Ze191f-tJ2pAMBtNxt14`
+3. If not there, run: `supabase secrets set GEMINI_API_KEY=AIzaSyCTX5kDfnnCJZ7O-JYc-6zMJGB8oAX2R-I`
 
 ### Function Deployment Failed?
 ```powershell

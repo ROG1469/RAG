@@ -325,7 +325,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000  # or production URL
 
 5. **Set Gemini API Key Secret:**
    ```powershell
-   supabase secrets set GEMINI_API_KEY=AIzaSyADgj69nrmSsC4Ze191f-tJ2pAMBtNxt14
+   supabase secrets set GEMINI_API_KEY=AIzaSyCTX5kDfnnCJZ7O-JYc-6zMJGB8oAX2R-I
    ```
 
 5. **Test all features** (use checklist above)
