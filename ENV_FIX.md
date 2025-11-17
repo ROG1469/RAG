@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
 Before running `npm run dev`, set the environment variables:
 
 ```powershell
-$env:NEXT_PUBLIC_SUPABASE_URL='https://jpyacjqxlppfawvobfds.supabase.co'
+$env:NEXT_PUBLIC_SUPABASE_URL=
 $env:NEXT_PUBLIC_SUPABASE_ANON_KEY='your-anon-key'
 $env:SUPABASE_SERVICE_ROLE_KEY='your-service-role-key'
 $env:GEMINI_API_KEY='your-gemini-key'
@@ -37,7 +37,7 @@ Create `start-dev.ps1`:
 ```powershell
 $env:NEXT_PUBLIC_SUPABASE_URL='https://jpyacjqxlppfawvobfds.supabase.co'
 $env:NEXT_PUBLIC_SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpweWFjanF4bHBwZmF3dm9iZmRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NjYxNTMsImV4cCI6MjA3ODQ0MjE1M30.slWlGi4fGC8MAzwTBViKMBTeus1nGjBhPONGLWyAEBM'
-$env:SUPABASE_SERVICE_ROLE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpweWFjanF4bHBwZmF3dm9iZmRzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2Mjg2NjE1MywiZXhwIjoyMDc4NDQyMTUzfQ.0hnm1q5bXxr2kHZEY55lYLnIu25TUnwQNpQUVMVCGEo'
+$env:SUPABASE_SERVICE_ROLE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpweWFjanF4bHBwZmF3dm9iZmRzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2Mjg2NjE1MywiZXhwIjoyMDc4NDQyMTUzfQ.ztmhNOPKKF7chBpYDNEMFKgQjpnCh5KLVgC5KPZYqEA'
 $env:GEMINI_API_KEY='AIzaSyADgj69nrmSsC4Ze191f-tJ2pAMBtNxt14'
 
 npm run dev
