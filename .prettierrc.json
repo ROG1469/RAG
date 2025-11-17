@@ -1,0 +1,29 @@
+{
+  "semi": false,
+  "singleQuote": true,
+  "trailingComma": "es5",
+  "tabWidth": 2,
+  "useTabs": false,
+  "printWidth": 80,
+  "endOfLine": "auto",
+  "bracketSpacing": true,
+  "bracketSameLine": false,
+  "arrowParens": "avoid",
+  "quoteProps": "as-needed",
+  "jsxSingleQuote": false,
+  "overrides": [
+    {
+      "files": ["*.json", "*.jsonc"],
+      "options": {
+        "singleQuote": false
+      }
+    },
+    {
+      "files": ["*.md", "*.mdx"],
+      "options": {
+        "printWidth": 70,
+        "proseWrap": "always"
+      }
+    }
+  ]
+}

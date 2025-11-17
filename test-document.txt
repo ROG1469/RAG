@@ -1,0 +1,12 @@
+﻿This is a test document about Retrieval Augmented Generation (RAG).
+
+RAG systems combine the power of large language models with the ability to retrieve specific information from documents. This allows the system to provide accurate, contextual answers based on the uploaded documents.
+
+Key benefits of RAG:
+1. More accurate answers based on actual documents
+2. Better context understanding
+3. Reduced hallucination from language models
+4. Easy to update with new information
+5. Cost-effective compared to fine-tuning
+
+This test document verifies that the file extraction and embedding generation is working correctly.

@@ -1,0 +1,38 @@
+# Cursor AI Rules
+
+## Project Context
+
+This is the **[rag3]** for [small business owners and startups to implement RAG systems efficiently for three users : business owners, customers, and internal employees (admins, end users, etc.)].
+
+**IMPORTANT:** Always read these files first:
+- `/AI_CONTEXT.md` - Complete project overview & structure
+- `/AI_DEVELOPMENT_GUIDE.md` - Coding standards & best practices
+- `/docs/DATABASE_ANALYSIS.md` - Database schema (if applicable)
+
+## Quick Reference
+
+**Stack:** [Next.js 14 / React / TypeScript / etc.]
+
+**Key Principles:**
+1. [Prinzip 1 - z.B. Server Actions for ALL database operations]
+2. [Prinzip 2 - z.B. TypeScript strict mode]
+3. [Prinzip 3 - z.B. Authentication check in all actions]
+4. [Prinzip 4 - z.B. RLS policies on all tables]
+
+**Project Structure:**
+- `/app/[route1]` - [Beschreibung]
+- `/app/[route2]` - [Beschreibung]
+- `/lib/[service]` - [Beschreibung]
+- `/components` - React components
+
+**Naming:**
+- Components: PascalCase
+- Files: kebab-case
+- Server Actions: verb + noun
+
+**Database:**
+- [Anzahl] tables (see DATABASE_ANALYSIS.md if applicable)
+- [Datenbank-System z.B. Supabase, PostgreSQL, etc.]
+- Key tables: `[table1]`, `[table2]`, `[table3]`
+
+For full details, see AI_DEVELOPMENT_GUIDE.md
