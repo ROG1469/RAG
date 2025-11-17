@@ -1,9 +1,7 @@
 import { getUser } from '@/app/actions/auth'
 import { getDocuments } from '@/app/actions/documents'
 import { redirect } from 'next/navigation'
-import FileUpload from '@/components/FileUpload'
-import DocumentList from '@/components/DocumentList'
-import ChatInterface from '@/components/ChatInterface'
+import DashboardContent from '@/components/DashboardContent'
 import { signOut } from '@/app/actions/auth'
 import { LogOut } from 'lucide-react'
 import type { Document } from '@/lib/types/database'
@@ -58,29 +56,8 @@ export default async function DashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left Column - Documents */}
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-200 mb-4">Upload Document</h2>
-              <FileUpload />
-            </div>
-
-            <div>
-              <h2 className="text-lg font-semibold text-gray-200 mb-4">
-                Your Documents ({documents.length})
-              </h2>
-              <DocumentList documents={documents} />
-            </div>
-          </div>
-
-          {/* Right Column - Chat */}
-          <div>
-            <h2 className="text-lg font-semibold text-gray-200 mb-4">Ask Questions</h2>
-            <ChatInterface />
-          </div>
-        </div>
+      <main className="max-w-full h-[calc(100vh-80px)] flex">
+        <DashboardContent documents={documents} />
       </main>
     </div>
   )

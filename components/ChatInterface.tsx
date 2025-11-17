@@ -5,7 +5,11 @@ import { useState } from 'react'
 import { Send, Loader2 } from 'lucide-react'
 import type { RAGResponse } from '@/lib/types/database'
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+  onQueryComplete?: () => void
+}
+
+export default function ChatInterface({ onQueryComplete }: ChatInterfaceProps = {}) {
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
   const [response, setResponse] = useState<RAGResponse | null>(null)
@@ -25,6 +29,10 @@ export default function ChatInterface() {
       setError(result.error)
     } else if (result.data) {
       setResponse(result.data)
+      // Notify parent component that a query was completed
+      if (onQueryComplete) {
+        onQueryComplete()
+      }
     }
 
     setLoading(false)

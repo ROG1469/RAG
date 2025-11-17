@@ -1,5 +1,6 @@
 // Supabase Edge Function: query-rag
 // RESPONSIBILITY: Handle RAG queries - embed question, search, generate answer
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -13,12 +14,12 @@ serve(async (req) => {
   }
 
   try {
-    const { question, userId } = await req.json();
-    console.log(`💬 Query from user ${userId}: "${question}"`);
+    const { question, userId, customerMode } = await req.json();
+    console.log(`💬 Query from user ${userId}: "${question}" (customerMode: ${customerMode})`);
 
-    if (!question || !userId) {
+    if (!question) {
       return new Response(
-        JSON.stringify({ error: "Missing question or userId" }),
+        JSON.stringify({ error: "Missing question" }),
         {
           status: 400,
           headers: { "Content-Type": "application/json" },
@@ -44,14 +45,32 @@ serve(async (req) => {
     const embedResult = await embeddingModel.embedContent(question);
     const questionEmbedding = embedResult.embedding.values;
 
-    // STEP 2 — Get documents for user
-    const { data: userDocuments } = await supabase
-      .from("documents")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("status", "completed");
+    // STEP 2 — Get documents based on mode
+    let documentIds: string[] = [];
 
-    if (!userDocuments || userDocuments.length === 0) {
+    if (customerMode) {
+      // Customer mode: only accessible_by_customers documents
+      const { data: customerDocs } = await supabase
+        .from("documents")
+        .select("id")
+        .eq("accessible_by_customers", true)
+        .eq("status", "completed");
+
+      documentIds = customerDocs?.map((d: any) => d.id) || [];
+      console.log(`🌍 Customer mode: Searching ${documentIds.length} customer-accessible documents`);
+    } else if (userId) {
+      // User mode: user's own documents (filtered by role permissions at query time)
+      const { data: userDocuments } = await supabase
+        .from("documents")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("status", "completed");
+
+      documentIds = userDocuments?.map((d: any) => d.id) || [];
+      console.log(`👤 User mode: Searching ${documentIds.length} user documents`);
+    }
+
+    if (documentIds.length === 0) {
       return new Response(
         JSON.stringify({
           error: "No documents available. Upload and process documents first.",
@@ -59,9 +78,6 @@ serve(async (req) => {
         { status: 404, headers: { "Content-Type": "application/json" } }
       );
     }
-
-    const documentIds = userDocuments.map((d) => d.id);
-    console.log(`📚 Searching ${documentIds.length} documents`);
 
     // STEP 3 — Fetch chunks + embeddings
     const { data: chunks } = await supabase
@@ -88,7 +104,7 @@ serve(async (req) => {
 
     // STEP 4 — Compute similarities
     const scored = chunks
-      .map((item) => {
+      .map((item: any) => {
         const rawEmbedding = item.embeddings?.[0]?.embedding;
 
         // Ensure vector is parsed correctly
@@ -105,7 +121,7 @@ serve(async (req) => {
           similarity: cosineSimilarity(questionEmbedding, embeddingArray),
         };
       })
-      .sort((a, b) => b.similarity - a.similarity)
+      .sort((a: any, b: any) => b.similarity - a.similarity)
       .slice(0, 5);
 
     console.log(`✅ Top similarity: ${scored[0]?.similarity.toFixed(3)}`);
@@ -117,7 +133,7 @@ serve(async (req) => {
       model: "gemini-2.5-flash",
     });
 
-    const context = scored.map((c) => c.content).join("\n\n---\n\n");
+    const context = scored.map((c: any) => c.content).join("\n\n---\n\n");
 
     const prompt = `
 You are a helpful AI assistant.
@@ -140,7 +156,7 @@ Answer:
     console.log(`✅ Answer generated (${answer.length} chars)`);
 
     // STEP 6 — Save chat history
-    const sourceDocumentIds = [...new Set(scored.map((c) => c.document_id))];
+    const sourceDocumentIds = [...new Set(scored.map((c: any) => c.document_id))];
 
     await supabase.from("chat_history").insert({
       user_id: userId,
@@ -153,11 +169,11 @@ Answer:
       JSON.stringify({
         success: true,
         answer,
-        sources: scored.map((c) => ({
+        sources: scored.map((c: any) => ({
           document_id: c.document_id,
           filename: c.filename,
-          chunk_preview: c.content.substring(0, 200) + "...",
-          relevance: c.similarity,
+          chunk_content: c.content.substring(0, 200) + "...",
+          relevance_score: c.similarity,
         })),
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
@@ -167,7 +183,7 @@ Answer:
 
     return new Response(
       JSON.stringify({
-        error: error?.message ?? "Unknown error",
+        error: (error as Error)?.message ?? "Unknown error",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );

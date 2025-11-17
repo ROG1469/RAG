@@ -25,7 +25,7 @@ supabase link --project-ref jpyacjqxlppfawvobfds
 
 1. **Set secrets** (environment variables for the function):
 ```powershell
-supabase secrets set GEMINI_API_KEY=AIzaSyCtNSzozk_CeirRkS_7HdAvcbtgEeS3DGQ
+supabase secrets set GEMINI_API_KEY=AIzaSyADgj69nrmSsC4Ze191f-tJ2pAMBtNxt14
 ```
 
 2. **Deploy the function**:

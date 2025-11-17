@@ -5,6 +5,8 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { default as pdfParse } from 'npm:pdf-parse@1.1.1'
+import mammoth from 'npm:mammoth@1.8.0'
+import { GoogleGenerativeAI } from 'npm:@google/generative-ai@0.24.1'
 
 console.log('✅ process-document Edge Function initialized')
 
@@ -49,9 +51,17 @@ serve(async (req: Request) => {
       const pdfData = await pdfParse(new Uint8Array(buffer))
       text = pdfData.text
       console.log(`✅ Extracted ${text.length} characters from PDF`)
-    } else if (fileType?.includes('text')) {
+    } else if (fileType?.includes('wordprocessingml')) {
+      // DOCX file
+      const result = await mammoth.extractRawText({ buffer: new Uint8Array(buffer) })
+      text = result.value
+      console.log(`✅ Extracted ${text.length} characters from DOCX`)
+    } else if (fileType?.includes('text') || fileType?.includes('plain')) {
       text = new TextDecoder().decode(buffer)
       console.log(`✅ Read ${text.length} characters from text file`)
+    } else if (fileType?.includes('spreadsheet') || fileType?.includes('sheet')) {
+      // For Excel files, return an error as they need special handling
+      throw new Error('Excel files require special parsing. Please convert to PDF or TXT.')
     } else {
       throw new Error(`Unsupported file type: ${fileType}`)
     }

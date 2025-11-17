@@ -64,6 +64,15 @@ export async function uploadDocument(formData: FormData) {
 
     console.log('[UPLOAD] File uploaded to storage successfully')
 
+    // Get permission settings from form data
+    const permissions = {
+      accessible_by_business_owners: true, // Always true
+      accessible_by_employees: formData.get('accessible_by_employees') === 'true',
+      accessible_by_customers: formData.get('accessible_by_customers') === 'true',
+    }
+    
+    console.log('[UPLOAD] Document permissions:', permissions)
+
     // Create document record
     console.log('[UPLOAD] Creating document record...')
     const { data: document, error: docError } = await supabase
@@ -74,7 +83,8 @@ export async function uploadDocument(formData: FormData) {
         file_type: file.type,
         file_size: file.size,
         storage_path: fileName,
-        status: 'processing'
+        status: 'processing',
+        ...permissions, // Include permission settings
       })
       .select()
       .single()

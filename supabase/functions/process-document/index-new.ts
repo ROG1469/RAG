@@ -5,6 +5,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { default as pdfParse } from 'npm:pdf-parse@1.1.1'
+import mammoth from 'npm:mammoth@1.8.0'
 
 console.log('✅ process-document initialized')
 
@@ -39,6 +40,10 @@ serve(async (req: Request) => {
     if (fileType?.includes('pdf')) {
       const pdfData = await pdfParse(new Uint8Array(buffer))
       text = pdfData.text
+    } else if (fileType?.includes('wordprocessingml')) {
+      // Handle DOCX files
+      const result = await mammoth.extractRawText({ buffer: new Uint8Array(buffer) })
+      text = result.value
     } else if (fileType?.includes('text')) {
       text = new TextDecoder().decode(buffer)
     } else {
