@@ -18,14 +18,14 @@ npm install -g supabase
 2. **Link to your Supabase project**:
 ```powershell
 supabase login
-supabase link --project-ref jpyacjqxlppfawvobfds
+supabase link --
 ```
 
 ## Deploy the Edge Function
 
 1. **Set secrets** (environment variables for the function):
 ```powershell
-supabase secrets set GEMINI_API_KEY=AIzaSyADgj69nrmSsC4Ze191f-tJ2pAMBtNxt14
+supabase secrets set GEMINI_API_KEY=
 ```
 
 2. **Deploy the function**:
