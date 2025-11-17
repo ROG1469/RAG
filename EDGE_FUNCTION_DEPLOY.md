@@ -18,7 +18,7 @@ npm install -g supabase
 2. **Link to your Supabase project**:
 ```powershell
 supabase login
-supabase link --project-ref jpyacjqxlppfawvobfds
+supabase link --
 ```
 
 ## Deploy the Edge Function
