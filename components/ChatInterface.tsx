@@ -1,8 +1,8 @@
 'use client'
 
-import { queryRAG } from '@/app/actions/rag'
+import { queryRAG, getChatHistory } from '@/app/actions/rag'
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Bot, User, Copy, Check } from 'lucide-react'
+import { Send, Loader2, Bot, User, Copy, Check, History, X } from 'lucide-react'
 import type { RAGResponse } from '@/lib/types/database'
 
 interface ChatInterfaceProps {
@@ -15,11 +15,21 @@ interface Message {
   sources?: RAGResponse['sources']
 }
 
+interface ChatHistoryItem {
+  id: string
+  question: string
+  answer: string
+  created_at: string
+}
+
 export default function ChatInterface({}: ChatInterfaceProps = {}) {
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -29,6 +39,29 @@ export default function ChatInterface({}: ChatInterfaceProps = {}) {
   useEffect(() => {
     scrollToBottom()
   }, [messages, loading])
+
+  async function loadChatHistory() {
+    if (historyLoading) return
+    setHistoryLoading(true)
+    try {
+      const result = await getChatHistory()
+      if (result.data) {
+        setChatHistory(result.data as ChatHistoryItem[])
+      }
+    } catch (err) {
+      console.error('Failed to load chat history:', err)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  function loadConversation(item: ChatHistoryItem) {
+    setMessages([
+      { role: 'user', content: item.question },
+      { role: 'assistant', content: item.answer }
+    ])
+    setShowHistory(false)
+  }
 
   async function copyToClipboard(text: string, index: number) {
     try {
@@ -67,7 +100,50 @@ export default function ChatInterface({}: ChatInterfaceProps = {}) {
   }
 
   return (
-    <div className="flex flex-col h-full max-h-full">
+    <div className="flex gap-4 h-full max-h-full">
+      {/* History Sidebar */}
+      {showHistory && (
+        <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
+          <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+            <h3 className="font-semibold text-gray-200">Chat History</h3>
+            <button
+              onClick={() => setShowHistory(false)}
+              className="p-1 hover:bg-gray-800 rounded"
+            >
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3">
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+              </div>
+            ) : chatHistory.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">No chat history</p>
+            ) : (
+              <div className="space-y-2">
+                {chatHistory.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => loadConversation(item)}
+                    className="w-full text-left p-3 hover:bg-gray-800 rounded-lg border border-gray-700 transition-colors"
+                  >
+                    <p className="text-sm font-medium text-gray-300 line-clamp-2">
+                      {item.question}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main Chat Area */}
+      <div className="flex flex-col h-full max-h-full flex-1">
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
         {messages.length === 0 ? (
@@ -147,19 +223,34 @@ export default function ChatInterface({}: ChatInterfaceProps = {}) {
 
       {/* Input Area */}
       <div className="p-6 bg-gray-900 border-t border-gray-800">
-        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative">
+        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (!showHistory) {
+                setShowHistory(true)
+                loadChatHistory()
+              } else {
+                setShowHistory(false)
+              }
+            }}
+            className="p-2 bg-gray-800 text-gray-400 hover:text-gray-200 rounded-xl hover:bg-gray-700 transition-colors shrink-0"
+            title="View chat history"
+          >
+            <History className="w-5 h-5" />
+          </button>
           <input
             type="text"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="Ask anything about your documents..."
-            className="w-full bg-gray-800 text-gray-100 rounded-2xl pl-6 pr-14 py-4 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 placeholder-gray-500 shadow-lg"
+            className="flex-1 bg-gray-800 text-gray-100 rounded-2xl pl-6 pr-14 py-4 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 placeholder-gray-500 shadow-lg"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !question.trim()}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors shrink-0"
           >
             <Send className="w-5 h-5" />
           </button>
@@ -169,5 +260,7 @@ export default function ChatInterface({}: ChatInterfaceProps = {}) {
         </p>
       </div>
     </div>
+  </div>
   )
 }
+
