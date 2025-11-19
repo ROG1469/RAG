@@ -133,6 +133,14 @@ serve(async (req) => {
     console.log(`💬 Analyzing question for multiple parts...`);
     const queryParts = parseMultiPartQuestion(question);
     console.log(`📋 Found ${queryParts.length} question part(s): ${queryParts.map(p => `"${p.substring(0, 30)}..."`).join(', ')}`);
+    
+    // Log document distribution for debugging
+    const docTypes = chunks.reduce((acc: any, item: any) => {
+      const filename = item.documents?.filename ?? "Unknown";
+      acc[filename] = (acc[filename] || 0) + 1;
+      return acc;
+    }, {});
+    console.log(`📂 Documents in search space:`, Object.entries(docTypes).map(([name, count]) => `${name} (${count} chunks)`).join(", "));
 
     let allScored: any[] = [];
     const processedParts = new Set<string>();
@@ -148,7 +156,7 @@ serve(async (req) => {
       const partEmbedding = partEmbedResult.embedding.values;
 
       // Calculate similarities for this part
-      const partScored = chunks
+      const scoredChunks = chunks
         .filter((item: any) => item.embeddings && item.embeddings.length > 0) // Only valid chunks
         .map((item: any) => {
           const rawEmbedding = item.embeddings[0].embedding;
@@ -165,11 +173,26 @@ serve(async (req) => {
             query_part: part,
           };
         })
-        .filter((item: any) => item.similarity >= 0.25) // Minimum threshold
-        .sort((a: any, b: any) => b.similarity - a.similarity)
-        .slice(0, 10);
+        .sort((a: any, b: any) => b.similarity - a.similarity);
 
-      console.log(`  → Found ${partScored.length} relevant chunks (min similarity: 0.25), top: ${partScored[0]?.similarity.toFixed(3) ?? 'N/A'}`);
+      // For multi-part questions, be more aggressive: get more chunks and lower threshold
+      const isMultiPart = queryParts.length > 1;
+      const threshold = isMultiPart ? 0.15 : 0.25; // Lower threshold for multi-part to catch all relevant info
+      const resultsLimit = isMultiPart ? 15 : 10; // Get more results for multi-part questions
+      
+      const partScored = scoredChunks
+        .filter((item: any) => item.similarity >= threshold)
+        .slice(0, resultsLimit);
+
+      console.log(`  → Found ${partScored.length} relevant chunks (multi-part: ${isMultiPart}, threshold: ${threshold}), top similarity: ${scoredChunks[0]?.similarity.toFixed(3) ?? 'N/A'}`);
+      
+      // Log which documents these chunks come from
+      if (partScored.length > 0) {
+        const sourceCount = new Set(partScored.map((c: any) => c.filename)).size;
+        console.log(`  → From ${sourceCount} document(s): ${Array.from(new Set(partScored.map((c: any) => c.filename))).join(", ")}`);
+        console.log(`  → Similarity range: ${Math.min(...partScored.map((c: any) => c.similarity)).toFixed(3)} to ${Math.max(...partScored.map((c: any) => c.similarity)).toFixed(3)}`);
+      }
+      
       allScored.push(...partScored);
     }
 
