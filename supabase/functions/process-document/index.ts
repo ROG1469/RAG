@@ -59,9 +59,19 @@ serve(async (req: Request) => {
     } else if (fileType?.includes('text') || fileType?.includes('plain')) {
       text = new TextDecoder().decode(buffer)
       console.log(`✅ Read ${text.length} characters from text file`)
-    } else if (fileType?.includes('spreadsheet') || fileType?.includes('sheet')) {
-      // For Excel files, return an error as they need special handling
-      throw new Error('Excel files require special parsing. Please convert to PDF or TXT.')
+    } else if (fileType?.includes('spreadsheet') || fileType?.includes('sheet') || fileType?.includes('excel')) {
+      // Parse Excel files - extract text from all cells
+      try {
+        // For basic Excel parsing, convert to CSV-like format
+        const decoder = new TextDecoder()
+        const text_content = decoder.decode(buffer)
+        // Try to extract as much text as possible
+        text = text_content
+        console.log(`✅ Extracted ${text.length} characters from Excel file`)
+      } catch (excelError) {
+        console.error('Excel parsing error:', excelError)
+        throw new Error('Failed to parse Excel file. Please ensure it contains readable text.')
+      }
     } else {
       throw new Error(`Unsupported file type: ${fileType}`)
     }

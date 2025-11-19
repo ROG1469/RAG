@@ -31,6 +31,7 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
     // Delete Modal State
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [selectedDocsToDelete, setSelectedDocsToDelete] = useState<Set<string>>(new Set())
 
     // Duplicate File Modal State
     const [duplicateFile, setDuplicateFile] = useState<File | null>(null)
@@ -39,10 +40,12 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
     const fileInputRef = useRef<HTMLInputElement>(null)
     const router = useRouter()
 
-    // Filter documents
-    const filteredDocs = documents.filter(doc =>
-        doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    // Filter documents - only show successfully uploaded ones
+    const filteredDocs = documents
+        .filter(doc => doc.status === 'completed') // Only show completed uploads
+        .filter(doc =>
+            doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
+        )
 
     const selectedDoc = documents.find(d => d.id === selectedDocId)
 
@@ -197,19 +200,45 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
 
     // --- Delete Logic ---
     async function confirmDelete() {
-        if (!selectedDocId) return
+        if (selectedDocsToDelete.size === 0) return
 
         setIsDeleting(true)
         try {
-            await deleteDocument(selectedDocId)
+            // Delete all selected documents
+            const deletePromises = Array.from(selectedDocsToDelete).map(docId =>
+                deleteDocument(docId)
+            )
+            await Promise.all(deletePromises)
+            
+            setSelectedDocsToDelete(new Set())
             setSelectedDocId(null)
             setShowDeleteModal(false)
             router.refresh()
         } catch (error) {
             console.error('Delete error:', error)
-            alert('Failed to delete document')
+            alert('Failed to delete documents')
         } finally {
             setIsDeleting(false)
+        }
+    }
+
+    function toggleSelectDoc(docId: string) {
+        setSelectedDocsToDelete(prev => {
+            const next = new Set(prev)
+            if (next.has(docId)) {
+                next.delete(docId)
+            } else {
+                next.add(docId)
+            }
+            return next
+        })
+    }
+
+    function toggleSelectAll() {
+        if (selectedDocsToDelete.size === filteredDocs.length) {
+            setSelectedDocsToDelete(new Set())
+        } else {
+            setSelectedDocsToDelete(new Set(filteredDocs.map(doc => doc.id)))
         }
     }
 
@@ -275,37 +304,64 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                             <p>No documents found</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                            {filteredDocs.map(doc => (
-                                <div
-                                    key={doc.id}
-                                    onClick={() => setSelectedDocId(doc.id)}
-                                    className={`group relative p-4 rounded-xl border transition-all cursor-pointer flex flex-col items-center gap-3 text-center ${selectedDocId === doc.id
-                                            ? 'bg-blue-500/10 border-blue-500/50 shadow-lg shadow-blue-500/10'
-                                            : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-slate-700'
-                                        }`}
-                                >
-                                    <div className="p-3 bg-slate-950 rounded-lg shadow-inner">
-                                        {getFileIcon(doc.filename)}
-                                    </div>
-                                    <div className="w-full">
-                                        <p className="text-sm font-medium truncate w-full" title={doc.filename}>
-                                            {doc.filename}
-                                        </p>
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            {formatSize(doc.file_size)}
-                                        </p>
-                                    </div>
-
-                                    {/* Status Indicator */}
-                                    <div className="absolute top-2 right-2">
-                                        {doc.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin text-blue-400" />}
-                                        {doc.status === 'failed' && <X className="w-3 h-3 text-red-400" />}
-                                        {doc.status === 'completed' && <div className="w-2 h-2 rounded-full bg-green-500/50" />}
-                                    </div>
+                        <>
+                            {/* Select All Bar */}
+                            {filteredDocs.length > 0 && (
+                                <div className="mb-4 flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedDocsToDelete.size === filteredDocs.length && filteredDocs.length > 0}
+                                        onChange={toggleSelectAll}
+                                        className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-slate-900"
+                                    />
+                                    <span className="text-sm text-slate-400">
+                                        {selectedDocsToDelete.size > 0
+                                            ? `${selectedDocsToDelete.size} selected`
+                                            : 'Select all'}
+                                    </span>
                                 </div>
-                            ))}
-                        </div>
+                            )}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                                {filteredDocs.map(doc => (
+                                    <div
+                                        key={doc.id}
+                                        className={`group relative p-4 rounded-xl border transition-all cursor-pointer flex flex-col items-center gap-3 text-center ${selectedDocId === doc.id
+                                                ? 'bg-blue-500/10 border-blue-500/50 shadow-lg shadow-blue-500/10'
+                                                : selectedDocsToDelete.has(doc.id)
+                                                    ? 'bg-purple-500/10 border-purple-500/50 shadow-lg shadow-purple-500/10'
+                                                    : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-slate-700'
+                                            }`}
+                                    >
+                                        {/* Checkbox in top-left */}
+                                        <div className="absolute top-2 left-2 flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedDocsToDelete.has(doc.id)}
+                                                onChange={(e) => {
+                                                    e.stopPropagation()
+                                                    toggleSelectDoc(doc.id)
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-slate-900"
+                                            />
+                                        </div>
+                                        <div onClick={() => !selectedDocsToDelete.has(doc.id) && setSelectedDocId(doc.id)} className="w-full">
+                                            <div className="p-3 bg-slate-950 rounded-lg shadow-inner">
+                                                {getFileIcon(doc.filename)}
+                                            </div>
+                                            <div className="w-full">
+                                                <p className="text-sm font-medium truncate w-full" title={doc.filename}>
+                                                    {doc.filename}
+                                                </p>
+                                                <p className="text-xs text-slate-500 mt-1">
+                                                    {formatSize(doc.file_size)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
                     )}
                 </div>
 
@@ -362,13 +418,27 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                                     </div>
                                 </div>
 
-                                <button
-                                    onClick={() => setShowDeleteModal(true)}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors text-sm font-medium mt-8"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                    Delete File
-                                </button>
+                                {selectedDocsToDelete.size > 0 && (
+                                    <button
+                                        onClick={() => setShowDeleteModal(true)}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white hover:bg-red-700 border border-red-500 rounded-lg transition-colors text-sm font-medium mt-8"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                        Delete Selected ({selectedDocsToDelete.size})
+                                    </button>
+                                )}
+                                {selectedDocId && selectedDocsToDelete.size === 0 && (
+                                    <button
+                                        onClick={() => {
+                                            setSelectedDocsToDelete(new Set([selectedDocId]))
+                                            setShowDeleteModal(true)
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors text-sm font-medium mt-8"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                        Delete File
+                                    </button>
+                                )}
                             </div>
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center">
@@ -487,10 +557,14 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                     <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 max-w-sm w-full shadow-2xl">
                         <div className="flex items-center gap-3 mb-4 text-red-400">
                             <AlertTriangle className="w-6 h-6" />
-                            <h3 className="text-lg font-semibold">Delete Document?</h3>
+                            <h3 className="text-lg font-semibold">
+                                {selectedDocsToDelete.size === 1 ? 'Delete Document?' : `Delete ${selectedDocsToDelete.size} Documents?`}
+                            </h3>
                         </div>
                         <p className="text-gray-400 text-sm mb-6">
-                            Are you sure you want to delete &quot;{selectedDoc?.filename}&quot;? This action cannot be undone.
+                            {selectedDocsToDelete.size === 1
+                                ? `Are you sure you want to delete \"${selectedDoc?.filename}\"? This action cannot be undone.`
+                                : `Are you sure you want to delete ${selectedDocsToDelete.size} selected documents? This action cannot be undone.`}
                         </p>
                         <div className="flex justify-end gap-3">
                             <button
@@ -505,7 +579,7 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
                             >
                                 {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                                Delete
+                                Delete {selectedDocsToDelete.size > 1 && `(${selectedDocsToDelete.size})`}
                             </button>
                         </div>
                     </div>
