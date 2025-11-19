@@ -113,7 +113,7 @@ serve(async (req: Request) => {
     }
 
     const genAI = new GoogleGenerativeAI(geminiApiKey)
-    const model = genAI.getGenerativeModel({ model: 'embedding-001' })
+    const model = genAI.getGenerativeModel({ model: 'models/text-embedding-004' })
 
     const embeddings: number[][] = []
     for (let i = 0; i < chunks.length; i++) {

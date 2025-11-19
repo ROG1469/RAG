@@ -103,30 +103,97 @@ serve(async (req) => {
 
     console.log(`🔍 Found ${chunks.length} chunks to search`);
 
-    // STEP 4 — Compute similarities - get top 10 results for better context
-    const scored = chunks
-      .map((item: any) => {
-        const rawEmbedding = item.embeddings?.[0]?.embedding;
+    // STEP 4 — Validate embeddings exist
+    let validChunks = 0;
+    let missingEmbeddingCount = 0;
+    
+    chunks.forEach((item: any) => {
+      if (item.embeddings && item.embeddings.length > 0) {
+        validChunks++;
+      } else {
+        missingEmbeddingCount++;
+        console.warn(`⚠️ Chunk ${item.id} missing embedding!`);
+      }
+    });
+    
+    console.log(`📊 Valid chunks with embeddings: ${validChunks}/${chunks.length} (${missingEmbeddingCount} missing)`);
 
-        // Ensure vector is parsed correctly
-        const embeddingArray =
-          typeof rawEmbedding === "string"
+    if (validChunks === 0) {
+      return new Response(
+        JSON.stringify({
+          error: "No embeddings found for document chunks. Documents may not have been processed correctly.",
+          answer: "I cannot search the documents because they have not been properly processed with embeddings yet. Please re-upload your documents.",
+          sources: []
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // STEP 5 — Parse multi-part question and run similarity searches
+    console.log(`💬 Analyzing question for multiple parts...`);
+    const queryParts = parseMultiPartQuestion(question);
+    console.log(`📋 Found ${queryParts.length} question part(s): ${queryParts.map(p => `"${p.substring(0, 30)}..."`).join(', ')}`);
+
+    let allScored: any[] = [];
+    const processedParts = new Set<string>();
+
+    for (const part of queryParts) {
+      if (processedParts.has(part.toLowerCase())) continue;
+      processedParts.add(part.toLowerCase());
+
+      console.log(`🔍 Searching for: "${part}"`);
+      
+      // Generate embedding for this part
+      const partEmbedResult = await embeddingModel.embedContent(part);
+      const partEmbedding = partEmbedResult.embedding.values;
+
+      // Calculate similarities for this part
+      const partScored = chunks
+        .filter((item: any) => item.embeddings && item.embeddings.length > 0) // Only valid chunks
+        .map((item: any) => {
+          const rawEmbedding = item.embeddings[0].embedding;
+          const embeddingArray = typeof rawEmbedding === "string"
             ? JSON.parse(rawEmbedding)
             : rawEmbedding;
 
-        return {
-          chunk_id: item.id,
-          content: item.content,
-          document_id: item.document_id,
-          filename: item.documents?.filename ?? "Unknown",
-          similarity: cosineSimilarity(questionEmbedding, embeddingArray),
-        };
-      })
-      .sort((a: any, b: any) => b.similarity - a.similarity)
-      .slice(0, 10); // Increased from 5 to 10 for better context on complex questions
+          return {
+            chunk_id: item.id,
+            content: item.content,
+            document_id: item.document_id,
+            filename: item.documents?.filename ?? "Unknown",
+            similarity: cosineSimilarity(partEmbedding, embeddingArray),
+            query_part: part,
+          };
+        })
+        .filter((item: any) => item.similarity >= 0.25) // Minimum threshold
+        .sort((a: any, b: any) => b.similarity - a.similarity)
+        .slice(0, 10);
 
-    console.log(`✅ Top similarity: ${scored[0]?.similarity.toFixed(3)}`);
-    console.log(`📊 Selected ${scored.length} chunks for context`);
+      console.log(`  → Found ${partScored.length} relevant chunks (min similarity: 0.25), top: ${partScored[0]?.similarity.toFixed(3) ?? 'N/A'}`);
+      allScored.push(...partScored);
+    }
+
+    // Remove duplicates, keep highest similarity
+    const uniqueScored = Array.from(
+      allScored
+        .reduce((map, item) => {
+          const key = item.chunk_id;
+          const existing = map.get(key);
+          if (!existing || item.similarity > existing.similarity) {
+            map.set(key, item);
+          }
+          return map;
+        }, new Map<string, any>())
+        .values()
+    ).sort((a: any, b: any) => b.similarity - a.similarity);
+
+    console.log(`✅ Total unique chunks selected: ${uniqueScored.length}`);
+    if (uniqueScored.length > 0) {
+      const topItem = uniqueScored[0] as any;
+      console.log(`  → Top similarity: ${topItem.similarity.toFixed(3)}`);
+    }
+    
+    const scored = uniqueScored;
 
     if (scored.length === 0) {
       return new Response(
@@ -139,7 +206,7 @@ serve(async (req) => {
       );
     }
 
-    // STEP 5 — Generate answer using Gemini with improved prompt
+    // STEP 6 — Generate answer using Gemini with improved prompt
     console.log("🤖 Generating answer...");
 
     const answerModel = genAI.getGenerativeModel({
@@ -148,37 +215,44 @@ serve(async (req) => {
 
     const context = scored.map((c: any) => c.content).join("\n\n---\n\n");
 
+    // Build structured context with source info for transparency
+    const contextWithSources = scored
+      .map((c: any, i: number) => `[Source ${i + 1} - ${c.filename}]\n${c.content}`)
+      .join("\n\n---\n\n");
+
     const prompt = `You are a professional business assistant that answers questions using provided context.
 
 CRITICAL INSTRUCTIONS:
-1. Answer ALL parts of the question if information exists in the context
-2. For multiple-part questions (e.g., paydays AND contact details AND summary), answer ALL parts separately
-3. If information is NOT found, state: "I do not have information about [specific part]" (no special formatting)
+1. Answer ALL parts of multi-part questions separately if information exists in the context
+2. For questions with multiple topics (e.g., "paydays AND contact details AND summary"), answer EACH topic separately
+3. If you cannot find information for a specific part, explicitly state: "I do not have information about [that specific topic]"
 4. Use PLAIN PROFESSIONAL TEXT ONLY - NO markdown, NO asterisks, NO special formatting
 5. Structure your answer clearly with line breaks between different parts
-6. Be concise and factual
+6. Be concise, factual, and complete - address every part asked
 
 FORMATTING RULES:
 - Do NOT use ** or ** for emphasis
 - Do NOT use # for headers
 - Do NOT use - or * for lists
-- Use plain text only
-- Use numbered lists like "1. Item" if needed
+- Use plain text with numbered items: "1. ", "2. ", etc.
 - Use line breaks to separate sections
+- Keep formatting professional and simple
 
-Context:
-${context}
+Provided Context:
+${contextWithSources}
 
 Question: ${question}
 
-Answer (plain professional text only):`;
+Answer (plain professional text, addressing ALL parts of the question):`;
 
     const result = await answerModel.generateContent(prompt);
     const answer = result.response.text();
 
     console.log(`✅ Answer generated (${answer.length} chars)`);
+    console.log(`📝 Used ${scored.length} context chunks`);
+    console.log(`🎯 Covered ${queryParts.length} question parts`);
 
-    // STEP 6 — Save chat history
+    // STEP 7 — Save chat history
     const sourceDocumentIds = [...new Set(scored.map((c: any) => c.document_id))];
 
     await supabase.from("chat_history").insert({
@@ -213,9 +287,38 @@ Answer (plain professional text only):`;
   }
 });
 
-// Cosine similarity helper
-function cosineSimilarity(a: number[], b: number[]) {
-  if (!a || !b || a.length !== b.length) return 0;
+// Parse multi-part questions into individual search queries
+function parseMultiPartQuestion(question: string): string[] {
+  // Split by common separators
+  const separators = [' and ', ' AND ', ' also ', ' ALSO ', '; ', ','];
+  let parts = [question];
+
+  for (const sep of separators) {
+    parts = parts.flatMap(part => part.split(sep));
+  }
+
+  // Clean and filter
+  return parts
+    .map(p => p.trim())
+    .filter(p => p.length > 3) // Ignore very short fragments
+    .map(p => {
+      // Remove question marks and extra whitespace
+      return p.replace(/^\s*\?+\s*|\s*\?+\s*$/g, '').trim();
+    })
+    .filter(p => p.length > 0);
+}
+
+// Cosine similarity helper with validation
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (!a || !b) {
+    console.warn('⚠️ Cosine similarity: One or both vectors undefined');
+    return 0;
+  }
+
+  if (a.length !== b.length) {
+    console.warn(`⚠️ Cosine similarity: Vector length mismatch (${a.length} vs ${b.length})`);
+    return 0;
+  }
 
   let dot = 0,
     normA = 0,
@@ -227,5 +330,11 @@ function cosineSimilarity(a: number[], b: number[]) {
     normB += b[i] ** 2;
   }
 
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  if (denominator === 0) {
+    console.warn('⚠️ Cosine similarity: Zero denominator');
+    return 0;
+  }
+
+  return dot / denominator;
 }
