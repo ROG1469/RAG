@@ -79,7 +79,7 @@ serve(async (req) => {
       );
     }
 
-    // STEP 3 — Fetch chunks + embeddings
+    // STEP 3 — Fetch chunks + embeddings with proper limit
     const { data: chunks } = await supabase
       .from("chunks")
       .select(
@@ -91,7 +91,8 @@ serve(async (req) => {
       embeddings(embedding)
     `
       )
-      .in("document_id", documentIds);
+      .in("document_id", documentIds)
+      .limit(1000); // Explicit limit to ensure we fetch all available chunks
 
     if (!chunks || chunks.length === 0) {
       return new Response(
@@ -102,7 +103,7 @@ serve(async (req) => {
 
     console.log(`🔍 Found ${chunks.length} chunks to search`);
 
-    // STEP 4 — Compute similarities
+    // STEP 4 — Compute similarities - get top 10 results for better context
     const scored = chunks
       .map((item: any) => {
         const rawEmbedding = item.embeddings?.[0]?.embedding;
@@ -122,11 +123,12 @@ serve(async (req) => {
         };
       })
       .sort((a: any, b: any) => b.similarity - a.similarity)
-      .slice(0, 5);
+      .slice(0, 10); // Increased from 5 to 10 for better context on complex questions
 
     console.log(`✅ Top similarity: ${scored[0]?.similarity.toFixed(3)}`);
+    console.log(`📊 Selected ${scored.length} chunks for context`);
 
-    // STEP 5 — Generate answer using Gemini
+    // STEP 5 — Generate answer using Gemini with improved prompt
     console.log("🤖 Generating answer...");
 
     const answerModel = genAI.getGenerativeModel({
@@ -136,11 +138,13 @@ serve(async (req) => {
     const context = scored.map((c: any) => c.content).join("\n\n---\n\n");
 
     const prompt = `
-You are a helpful AI assistant.
+You are a helpful AI assistant that answers questions comprehensively using provided context.
 
-Answer ONLY using the following context.  
-If the answer is not in the context, say:
-"I don't have enough information to answer that."
+INSTRUCTIONS:
+1. Answer ALL parts of complex questions if information exists in the context
+2. If the question asks multiple things (e.g., paydays AND contact details AND summary), provide answers to ALL of them
+3. If specific information is not found, say "I don't have information about [specific part]" rather than rejecting the whole question
+4. Be thorough and provide complete answers using all relevant context
 
 Context:
 ${context}

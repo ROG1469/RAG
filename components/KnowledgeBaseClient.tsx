@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
     Search, FileText, FileSpreadsheet, File, Trash2,
-    Upload, X, CheckCircle2, Loader2, Info, Calendar, HardDrive, AlertTriangle
+    Upload, X, CheckCircle2, Loader2, Info, Calendar, HardDrive, AlertTriangle, RefreshCw
 } from 'lucide-react'
 import type { Document } from '@/lib/types/database'
 import { uploadDocument, deleteDocument } from '@/app/actions/documents'
@@ -37,11 +37,19 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
     const [duplicateFile, setDuplicateFile] = useState<File | null>(null)
     const [pendingUploads, setPendingUploads] = useState<File[]>([])
 
+    // Local documents state to track real-time updates
+    const [localDocuments, setLocalDocuments] = useState<Document[]>(documents)
+
     const fileInputRef = useRef<HTMLInputElement>(null)
     const router = useRouter()
 
+    // Update local documents when prop changes
+    useEffect(() => {
+        setLocalDocuments(documents)
+    }, [documents])
+
     // Filter documents - only show successfully uploaded ones
-    const filteredDocs = documents
+    const filteredDocs = localDocuments
         .filter(doc => doc.status === 'completed') // Only show completed uploads
         .filter(doc =>
             doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
@@ -51,12 +59,12 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
 
     // Auto-refresh
     useEffect(() => {
-        const hasProcessing = documents.some(doc => doc.status === 'processing')
+        const hasProcessing = localDocuments.some(doc => doc.status === 'processing')
         if (hasProcessing) {
             const interval = setInterval(() => router.refresh(), 3000)
             return () => clearInterval(interval)
         }
-    }, [documents, router])
+    }, [localDocuments, router])
 
     // --- File Upload Logic ---
     async function startUploadProcess() {
@@ -64,7 +72,7 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
 
         // Check for duplicates first
         const duplicates = selectedFiles.filter(file =>
-            documents.some(doc => doc.filename === file.name)
+            localDocuments.some(doc => doc.filename === file.name)
         )
 
         if (duplicates.length > 0) {
@@ -267,6 +275,13 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                     <span className="font-medium">Knowledge Base</span>
                     <span className="text-slate-600">/</span>
                     <span className="text-slate-200">Documents</span>
+                    <button
+                        onClick={() => router.refresh()}
+                        className="ml-4 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                        title="Refresh document list"
+                    >
+                        <RefreshCw className="w-4 h-4" />
+                    </button>
                 </div>
 
                 <div className="relative w-64">
@@ -302,30 +317,37 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                         <div className="h-full flex flex-col items-center justify-center text-slate-500">
                             <File className="w-16 h-16 mb-4 opacity-20" />
                             <p>No documents found</p>
+                            <p className="text-xs text-slate-600 mt-2">Total documents: {localDocuments.length} (Completed: {localDocuments.filter(d => d.status === 'completed').length})</p>
                         </div>
                     ) : (
                         <>
                             {/* Select All Bar */}
                             {filteredDocs.length > 0 && (
-                                <div className="mb-4 flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedDocsToDelete.size === filteredDocs.length && filteredDocs.length > 0}
-                                        onChange={toggleSelectAll}
-                                        className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-slate-900"
-                                    />
-                                    <span className="text-sm text-slate-400">
-                                        {selectedDocsToDelete.size > 0
-                                            ? `${selectedDocsToDelete.size} selected`
-                                            : 'Select all'}
+                                <div className="mb-4 flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedDocsToDelete.size === filteredDocs.length && filteredDocs.length > 0}
+                                            onChange={toggleSelectAll}
+                                            className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-slate-900"
+                                        />
+                                        <span className="text-sm text-slate-400">
+                                            {selectedDocsToDelete.size > 0
+                                                ? `${selectedDocsToDelete.size} selected`
+                                                : 'Select all'}
+                                        </span>
+                                    </div>
+                                    <span className="text-xs text-slate-500">
+                                        Showing {filteredDocs.length} of {localDocuments.filter(d => d.status === 'completed').length} documents
                                     </span>
                                 </div>
                             )}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                                 {filteredDocs.map(doc => (
                                     <div
                                         key={doc.id}
-                                        className={`group relative p-4 rounded-xl border transition-all cursor-pointer flex flex-col items-center gap-3 text-center ${selectedDocId === doc.id
+                                        onClick={() => !selectedDocsToDelete.has(doc.id) && setSelectedDocId(doc.id)}
+                                        className={`group relative p-2 rounded-lg border transition-all cursor-pointer flex flex-col items-center gap-2 text-center ${selectedDocId === doc.id
                                                 ? 'bg-blue-500/10 border-blue-500/50 shadow-lg shadow-blue-500/10'
                                                 : selectedDocsToDelete.has(doc.id)
                                                     ? 'bg-purple-500/10 border-purple-500/50 shadow-lg shadow-purple-500/10'
@@ -333,7 +355,7 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                                             }`}
                                     >
                                         {/* Checkbox in top-left */}
-                                        <div className="absolute top-2 left-2 flex items-center">
+                                        <div className="absolute top-1 left-1 flex items-center z-10">
                                             <input
                                                 type="checkbox"
                                                 checked={selectedDocsToDelete.has(doc.id)}
@@ -345,19 +367,16 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                                                 className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-slate-900"
                                             />
                                         </div>
-                                        <div onClick={() => !selectedDocsToDelete.has(doc.id) && setSelectedDocId(doc.id)} className="w-full">
-                                            <div className="p-3 bg-slate-950 rounded-lg shadow-inner">
-                                                {getFileIcon(doc.filename)}
-                                            </div>
-                                            <div className="w-full">
-                                                <p className="text-sm font-medium truncate w-full" title={doc.filename}>
-                                                    {doc.filename}
-                                                </p>
-                                                <p className="text-xs text-slate-500 mt-1">
-                                                    {formatSize(doc.file_size)}
-                                                </p>
-                                            </div>
+                                        
+                                        {/* Icon */}
+                                        <div className="p-2 bg-slate-950 rounded shadow-inner">
+                                            {getFileIcon(doc.filename)}
                                         </div>
+                                        
+                                        {/* Filename only */}
+                                        <p className="text-xs font-medium truncate w-full px-1" title={doc.filename}>
+                                            {doc.filename}
+                                        </p>
                                     </div>
                                 ))}
                             </div>
@@ -450,15 +469,42 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
             </div>
 
             {/* --- Bottom Bar: Upload --- */}
-            <div className="h-auto min-h-20 bg-slate-900 border-t border-slate-800 p-4 flex items-center gap-4 overflow-hidden">
-                <div className="flex-1 flex items-center gap-4 min-w-0">
-                    <button
+            <div 
+                className="h-auto min-h-32 bg-slate-900 border-t border-slate-800 p-4 flex items-center gap-4 overflow-hidden"
+                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true) }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true) }}
+                onDragLeave={(e) => { 
+                    e.preventDefault()
+                    if (e.currentTarget === e.target) setDragActive(false) 
+                }}
+                onDrop={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setDragActive(false)
+                    if (e.dataTransfer.files?.length) {
+                        setSelectedFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)])
+                    }
+                }}
+            >
+                {dragActive && (
+                    <div className="absolute inset-0 bg-blue-500/10 border-2 border-blue-500 border-dashed z-40 flex items-center justify-center pointer-events-none">
+                        <p className="text-blue-400 font-medium text-lg">Drop files here to upload</p>
+                    </div>
+                )}
+
+                <div className="flex-1 flex flex-col items-center gap-4 min-w-0 relative z-30">
+                    {/* Clickable Upload Area */}
+                    <div
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex flex-col items-center justify-center w-32 h-16 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shrink-0"
+                        className="w-full px-6 py-6 border-2 border-dashed border-slate-600 hover:border-slate-400 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all cursor-pointer flex flex-col items-center justify-center gap-3"
                     >
-                        <Upload className="w-5 h-5 mb-1" />
-                        <span className="text-xs font-medium">Upload</span>
-                    </button>
+                        <Upload className="w-6 h-6 text-blue-400" />
+                        <div className="text-center">
+                            <p className="text-sm font-medium text-slate-300">Click to upload or drag and drop</p>
+                            <p className="text-xs text-slate-500 mt-1">PDF, DOCX, XLSX, CSV, TXT</p>
+                        </div>
+                    </div>
+
                     <input
                         type="file"
                         ref={fileInputRef}
@@ -469,46 +515,46 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                     />
 
                     {/* Upload Queue / Status */}
-                    <div className="flex-1 overflow-x-auto flex gap-3 min-w-0">
-                        {selectedFiles.length === 0 ? (
-                            <div className="flex items-center justify-center w-full h-16 border-2 border-dashed border-slate-700 rounded-lg text-slate-500 text-sm shrink-0">
-                                Drag & drop files here to upload
-                            </div>
-                        ) : (
-                            selectedFiles.map((file, idx) => (
-                                <div key={idx} className={`flex items-center gap-3 px-4 py-2 rounded-lg border shrink-0 min-w-[200px] transition-colors ${completedFiles.has(file.name)
-                                        ? 'bg-green-900/20 border-green-800'
-                                        : uploadError?.startsWith(file.name)
-                                            ? 'bg-red-900/20 border-red-800'
-                                            : 'bg-slate-800 border-slate-700'
-                                    }`}>
-                                    {getFileIcon(file.name)}
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium truncate max-w-[120px]">{file.name}</p>
-                                        <p className="text-xs text-slate-400">
-                                            {uploadingFiles.has(file.name) ? 'Uploading...' :
-                                                completedFiles.has(file.name) ? 'Completed' :
-                                                    uploadError?.startsWith(file.name) ? 'Failed' : 'Pending'}
-                                        </p>
+                    {selectedFiles.length > 0 && (
+                        <div className="w-full">
+                            <p className="text-xs text-slate-400 mb-2">Selected files ({selectedFiles.length}):</p>
+                            <div className="flex flex-wrap gap-2">
+                                {selectedFiles.map((file, idx) => (
+                                    <div key={idx} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-colors ${completedFiles.has(file.name)
+                                            ? 'bg-green-900/20 border-green-800'
+                                            : uploadError?.startsWith(file.name)
+                                                ? 'bg-red-900/20 border-red-800'
+                                                : 'bg-slate-800 border-slate-700'
+                                        }`}>
+                                        {getFileIcon(file.name)}
+                                        <span className="truncate max-w-[150px]">{file.name}</span>
+                                        {completedFiles.has(file.name) ? (
+                                            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                                        ) : uploadError?.startsWith(file.name) ? (
+                                            <X className="w-4 h-4 text-red-500 shrink-0" />
+                                        ) : uploadingFiles.has(file.name) ? (
+                                            <Loader2 className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
+                                        ) : (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setSelectedFiles(prev => prev.filter(f => f !== file))
+                                                }} 
+                                                className="shrink-0"
+                                            >
+                                                <X className="w-4 h-4 text-slate-400 hover:text-slate-200" />
+                                            </button>
+                                        )}
                                     </div>
-                                    {completedFiles.has(file.name) ? (
-                                        <CheckCircle2 className="w-5 h-5 text-green-500 ml-auto" />
-                                    ) : uploadError?.startsWith(file.name) ? (
-                                        <X className="w-5 h-5 text-red-500 ml-auto" />
-                                    ) : !isUploading && (
-                                        <button onClick={() => setSelectedFiles(prev => prev.filter(f => f !== file))} className="ml-auto">
-                                            <X className="w-4 h-4 text-slate-500 hover:text-slate-300" />
-                                        </button>
-                                    )}
-                                </div>
-                            ))
-                        )}
-                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Upload Permissions & Action */}
                 {selectedFiles.length > 0 && (
-                    <div className="flex items-center gap-4 pl-4 border-l border-slate-800 shrink-0">
+                    <div className="flex flex-col gap-3 pl-4 border-l border-slate-800 shrink-0">
                         <div className="flex flex-col gap-1">
                             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
                                 <input
@@ -532,9 +578,9 @@ export default function KnowledgeBaseExplorer({ documents }: KnowledgeBaseExplor
                         <button
                             onClick={startUploadProcess}
                             disabled={isUploading}
-                            className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
-                            {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Start Upload'}
+                            {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
                         </button>
                     </div>
                 )}

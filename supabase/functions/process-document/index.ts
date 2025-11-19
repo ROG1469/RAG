@@ -60,14 +60,29 @@ serve(async (req: Request) => {
       text = new TextDecoder().decode(buffer)
       console.log(`✅ Read ${text.length} characters from text file`)
     } else if (fileType?.includes('spreadsheet') || fileType?.includes('sheet') || fileType?.includes('excel')) {
-      // Parse Excel files - extract text from all cells
+      // Parse Excel files - extract text from XML content
       try {
-        // For basic Excel parsing, convert to CSV-like format
-        const decoder = new TextDecoder()
-        const text_content = decoder.decode(buffer)
-        // Try to extract as much text as possible
-        text = text_content
-        console.log(`✅ Extracted ${text.length} characters from Excel file`)
+        // XLSX is a ZIP file, we'll extract text by looking for common patterns
+        const uint8Array = new Uint8Array(buffer)
+        const decoder = new TextDecoder('utf-8', { fatal: false })
+        const rawText = decoder.decode(uint8Array)
+        
+        // Extract text between XML tags (cells contain values in <v> tags)
+        // Also try to extract from sheet data
+        const textMatches = rawText.match(/<v[^>]*>[^<]*<\/v>/gi) || []
+        const extractedValues = textMatches.map(match => 
+          match.replace(/<[^>]*>/g, '').trim()
+        ).filter(v => v.length > 0)
+        
+        // If we got values from XML, use them; otherwise use raw decoded text
+        if (extractedValues.length > 0) {
+          text = extractedValues.join(' ')
+          console.log(`✅ Extracted ${extractedValues.length} cell values from Excel file`)
+        } else {
+          // Fallback: use raw text and filter out non-printable characters
+          text = rawText.replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim()
+          console.log(`✅ Extracted ${text.length} characters from Excel file (fallback)`)
+        }
       } catch (excelError) {
         console.error('Excel parsing error:', excelError)
         throw new Error('Failed to parse Excel file. Please ensure it contains readable text.')

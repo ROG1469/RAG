@@ -67,8 +67,8 @@ export async function uploadDocument(formData: FormData) {
     // Get permission settings from form data
     const permissions = {
       accessible_by_business_owners: true, // Always true
-      accessible_by_employees: formData.get('visibleToEmployee') === 'true',
-      accessible_by_customers: formData.get('visibleToCustomer') === 'true',
+      accessible_by_employees: formData.get('accessible_by_employees') === 'true',
+      accessible_by_customers: formData.get('accessible_by_customers') === 'true',
     }
     
     console.log('[UPLOAD] Document permissions:', permissions)
@@ -190,17 +190,19 @@ export async function getDocuments() {
     return { error: 'Unauthorized' }
   }
 
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from('documents')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
   if (error) {
+    console.error('Error fetching documents:', error)
     return { error: error.message }
   }
 
-  return { data }
+  console.log(`[FETCH] Retrieved ${data?.length || 0} documents (total count: ${count})`)
+  return { data, count }
 }
 
 export async function deleteDocument(documentId: string) {

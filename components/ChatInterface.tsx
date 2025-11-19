@@ -2,7 +2,7 @@
 
 import { queryRAG } from '@/app/actions/rag'
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Bot, User } from 'lucide-react'
+import { Send, Loader2, Bot, User, Copy, Check } from 'lucide-react'
 import type { RAGResponse } from '@/lib/types/database'
 
 interface ChatInterfaceProps {
@@ -19,6 +19,7 @@ export default function ChatInterface({}: ChatInterfaceProps = {}) {
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -28,6 +29,16 @@ export default function ChatInterface({}: ChatInterfaceProps = {}) {
   useEffect(() => {
     scrollToBottom()
   }, [messages, loading])
+
+  async function copyToClipboard(text: string, index: number) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedIndex(index)
+      setTimeout(() => setCopiedIndex(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -79,6 +90,24 @@ export default function ChatInterface({}: ChatInterfaceProps = {}) {
                   }`}>
                   <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                 </div>
+
+                {/* Copy Button */}
+                <button
+                  onClick={() => copyToClipboard(msg.content, idx)}
+                  className="text-xs px-2 py-1 text-gray-500 hover:text-gray-300 flex items-center gap-1"
+                >
+                  {copiedIndex === idx ? (
+                    <>
+                      <Check className="w-3 h-3" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      Copy
+                    </>
+                  )}
+                </button>
 
                 {/* Sources for Assistant Messages */}
                 {msg.sources && msg.sources.length > 0 && (
