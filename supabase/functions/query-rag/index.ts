@@ -128,6 +128,17 @@ serve(async (req) => {
     console.log(`✅ Top similarity: ${scored[0]?.similarity.toFixed(3)}`);
     console.log(`📊 Selected ${scored.length} chunks for context`);
 
+    if (scored.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error: "No relevant information found in documents. Please try a different question or upload more documents.",
+          answer: "I could not find any relevant information to answer your question in the available documents.",
+          sources: []
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     // STEP 5 — Generate answer using Gemini with improved prompt
     console.log("🤖 Generating answer...");
 
@@ -137,22 +148,30 @@ serve(async (req) => {
 
     const context = scored.map((c: any) => c.content).join("\n\n---\n\n");
 
-    const prompt = `
-You are a helpful AI assistant that answers questions comprehensively using provided context.
+    const prompt = `You are a professional business assistant that answers questions using provided context.
 
-INSTRUCTIONS:
-1. Answer ALL parts of complex questions if information exists in the context
-2. If the question asks multiple things (e.g., paydays AND contact details AND summary), provide answers to ALL of them
-3. If specific information is not found, say "I don't have information about [specific part]" rather than rejecting the whole question
-4. Be thorough and provide complete answers using all relevant context
+CRITICAL INSTRUCTIONS:
+1. Answer ALL parts of the question if information exists in the context
+2. For multiple-part questions (e.g., paydays AND contact details AND summary), answer ALL parts separately
+3. If information is NOT found, state: "I do not have information about [specific part]" (no special formatting)
+4. Use PLAIN PROFESSIONAL TEXT ONLY - NO markdown, NO asterisks, NO special formatting
+5. Structure your answer clearly with line breaks between different parts
+6. Be concise and factual
+
+FORMATTING RULES:
+- Do NOT use ** or ** for emphasis
+- Do NOT use # for headers
+- Do NOT use - or * for lists
+- Use plain text only
+- Use numbered lists like "1. Item" if needed
+- Use line breaks to separate sections
 
 Context:
 ${context}
 
 Question: ${question}
 
-Answer:
-    `;
+Answer (plain professional text only):`;
 
     const result = await answerModel.generateContent(prompt);
     const answer = result.response.text();

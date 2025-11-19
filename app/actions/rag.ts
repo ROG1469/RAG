@@ -76,8 +76,11 @@ export async function getChatHistory() {
   
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
+    console.error('[GET CHAT HISTORY] No user found')
     return { error: 'Unauthorized' }
   }
+
+  console.log('[GET CHAT HISTORY] Fetching for user:', user.id)
 
   const { data, error } = await supabase
     .from('chat_history')
@@ -87,7 +90,15 @@ export async function getChatHistory() {
     .limit(20)
 
   if (error) {
+    console.error('[GET CHAT HISTORY] Query error:', error)
+    console.error('[GET CHAT HISTORY] Error message:', error.message)
+    console.error('[GET CHAT HISTORY] Error details:', error)
     return { error: error.message }
+  }
+
+  console.log('[GET CHAT HISTORY] Found', data?.length || 0, 'items')
+  if (data && data.length > 0) {
+    console.log('[GET CHAT HISTORY] First item:', data[0])
   }
 
   return { data }

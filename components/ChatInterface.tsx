@@ -1,7 +1,7 @@
 'use client'
 
 import { queryRAG, getChatHistory } from '@/app/actions/rag'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Loader2, Bot, User, Copy, Check, History, X } from 'lucide-react'
 import type { RAGResponse } from '@/lib/types/database'
 
@@ -19,6 +19,7 @@ interface ChatHistoryItem {
   id: string
   question: string
   answer: string
+  sources?: unknown // Store as-is from database (usually array of document IDs)
   created_at: string
 }
 
@@ -36,31 +37,43 @@ export default function ChatInterface({}: ChatInterfaceProps = {}) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages, loading])
-
-  async function loadChatHistory() {
+  const loadChatHistory = useCallback(async () => {
     if (historyLoading) return
     setHistoryLoading(true)
     try {
       const result = await getChatHistory()
+      console.log('[CHAT HISTORY] Result:', result)
       if (result.data) {
+        console.log('[CHAT HISTORY] Loaded', result.data.length, 'items')
         setChatHistory(result.data as ChatHistoryItem[])
+      } else if (result.error) {
+        console.error('[CHAT HISTORY] Error:', result.error)
       }
     } catch (err) {
-      console.error('Failed to load chat history:', err)
+      console.error('[CHAT HISTORY] Failed to load chat history:', err)
     } finally {
       setHistoryLoading(false)
     }
-  }
+  }, [historyLoading])
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, loading])
 
   function loadConversation(item: ChatHistoryItem) {
-    setMessages([
+    console.log('[CHAT HISTORY] Loading conversation:', item)
+    // Set messages immediately
+    const newMessages: Message[] = [
       { role: 'user', content: item.question },
       { role: 'assistant', content: item.answer }
-    ])
+    ]
+    setMessages(newMessages)
     setShowHistory(false)
+    
+    // Scroll to bottom after setting messages
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }, 100)
   }
 
   async function copyToClipboard(text: string, index: number) {
@@ -227,14 +240,21 @@ export default function ChatInterface({}: ChatInterfaceProps = {}) {
           <button
             type="button"
             onClick={() => {
+              console.log('[CHAT HISTORY] History button clicked. Current state:', showHistory)
               if (!showHistory) {
+                console.log('[CHAT HISTORY] Opening sidebar and loading history')
                 setShowHistory(true)
                 loadChatHistory()
               } else {
+                console.log('[CHAT HISTORY] Closing sidebar')
                 setShowHistory(false)
               }
             }}
-            className="p-2 bg-gray-800 text-gray-400 hover:text-gray-200 rounded-xl hover:bg-gray-700 transition-colors shrink-0"
+            className={`p-2 rounded-xl transition-colors shrink-0 ${
+              showHistory 
+                ? 'bg-blue-600 text-white hover:bg-blue-500' 
+                : 'bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+            }`}
             title="View chat history"
           >
             <History className="w-5 h-5" />
