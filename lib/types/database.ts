@@ -16,6 +16,9 @@ export interface Document {
   storage_path: string
   status: 'processing' | 'completed' | 'failed'
   error_message?: string
+  accessible_by_business_owners: boolean
+  accessible_by_employees: boolean
+  accessible_by_customers: boolean
   created_at: string
   updated_at: string
 }

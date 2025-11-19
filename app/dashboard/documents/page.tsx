@@ -1,12 +1,12 @@
 import { getUser } from '@/app/actions/auth'
 import { getDocuments } from '@/app/actions/documents'
 import { redirect } from 'next/navigation'
-import DashboardContent from '@/components/DashboardContent'
+import DashboardClient from '@/components/DashboardClient'
 import type { Document } from '@/lib/types/database'
 
-export default async function DashboardPage() {
+export default async function DocumentsPage() {
   const user = await getUser()
-
+  
   if (!user) {
     redirect('/auth/signin')
   }
@@ -17,21 +17,17 @@ export default async function DashboardPage() {
     documents = (documentsResult.data || []) as Document[]
   } catch (error) {
     console.error('Error fetching documents:', error)
-    // Continue without documents on error
   }
 
+  // Determine user role - default to business_owner if not set
+  const userRole = user.role || 'business_owner'
+
   return (
-    <div className="min-h-screen bg-gray-900">
-      <main className="max-w-full h-screen flex flex-col">
-        <DashboardContent
-          documents={documents}
-          user={{
-            email: user.email || '',
-            full_name: user.full_name,
-            role: user.role
-          }}
-        />
-      </main>
-    </div>
+    <DashboardClient 
+      userEmail={user.email || ''} 
+      initialRole={userRole}
+      isKnowledgeBase={true}
+      initialDocuments={documents}
+    />
   )
 }

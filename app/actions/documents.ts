@@ -67,8 +67,8 @@ export async function uploadDocument(formData: FormData) {
     // Get permission settings from form data
     const permissions = {
       accessible_by_business_owners: true, // Always true
-      accessible_by_employees: formData.get('accessible_by_employees') === 'true',
-      accessible_by_customers: formData.get('accessible_by_customers') === 'true',
+      accessible_by_employees: formData.get('visibleToEmployee') === 'true',
+      accessible_by_customers: formData.get('visibleToCustomer') === 'true',
     }
     
     console.log('[UPLOAD] Document permissions:', permissions)
@@ -169,7 +169,8 @@ export async function uploadDocument(formData: FormData) {
     }
 
     revalidatePath('/dashboard')
-    return { success: true, documentId: document.id }
+    revalidatePath('/dashboard/documents')
+    return { success: true, data: document }
 
   } catch (error) {
     console.error('[UPLOAD] Upload error:', error)
@@ -237,5 +238,42 @@ export async function deleteDocument(documentId: string) {
   }
 
   revalidatePath('/dashboard')
+  revalidatePath('/dashboard/documents')
   return { success: true }
+}
+
+export async function updateDocumentVisibility(documentId: string, field: 'employee' | 'customer', value: boolean) {
+  const supabase = await createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: 'Unauthorized' }
+  }
+
+  // Check ownership
+  const { data: document } = await supabase
+    .from('documents')
+    .select('user_id')
+    .eq('id', documentId)
+    .single()
+
+  if (!document || document.user_id !== user.id) {
+    return { error: 'Document not found or unauthorized' }
+  }
+
+  const columnName = field === 'employee' ? 'accessible_by_employees' : 'accessible_by_customers'
+
+  const { data, error } = await supabase
+    .from('documents')
+    .update({ [columnName]: value })
+    .eq('id', documentId)
+    .select()
+    .single()
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath('/dashboard/documents')
+  return { success: true, data }
 }

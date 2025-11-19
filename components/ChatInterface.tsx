@@ -1,105 +1,144 @@
 'use client'
 
 import { queryRAG } from '@/app/actions/rag'
-import { useState } from 'react'
-import { Send, Loader2 } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Send, Loader2, Bot, User } from 'lucide-react'
 import type { RAGResponse } from '@/lib/types/database'
 
 interface ChatInterfaceProps {
   onQueryComplete?: () => void
 }
 
-export default function ChatInterface({ onQueryComplete }: ChatInterfaceProps = {}) {
+interface Message {
+  role: 'user' | 'assistant'
+  content: string
+  sources?: RAGResponse['sources']
+}
+
+export default function ChatInterface({}: ChatInterfaceProps = {}) {
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
-  const [response, setResponse] = useState<RAGResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, loading])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!question.trim()) return
+    if (!question.trim() || loading) return
 
+    const currentQuestion = question
+    setQuestion('')
     setLoading(true)
-    setError(null)
-    setResponse(null)
 
-    const result = await queryRAG(question)
+    // Add user message immediately
+    setMessages(prev => [...prev, { role: 'user', content: currentQuestion }])
+
+    const result = await queryRAG(currentQuestion)
 
     if (result.error) {
-      setError(result.error)
+      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${result.error}` }])
     } else if (result.data) {
-      setResponse(result.data)
-      // Notify parent component that a query was completed
-      if (onQueryComplete) {
-        onQueryComplete()
-      }
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: result.data!.answer,
+        sources: result.data!.sources 
+      }])
     }
 
     setLoading(false)
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      <form onSubmit={handleSubmit} className="mb-6">
-        <div className="flex gap-2">
+    <div className="flex flex-col h-full max-h-full">
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-50">
+            <Bot className="w-16 h-16 mb-4" />
+            <p className="text-lg">Ask a question to start chatting</p>
+          </div>
+        ) : (
+          messages.map((msg, idx) => (
+            <div key={idx} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-blue-600' : 'bg-purple-600'
+                }`}>
+                {msg.role === 'user' ? <User className="w-5 h-5 text-white" /> : <Bot className="w-5 h-5 text-white" />}
+              </div>
+
+              <div className={`max-w-[80%] space-y-2 ${msg.role === 'user' ? 'items-end flex flex-col' : ''}`}>
+                <div className={`rounded-2xl px-6 py-4 ${msg.role === 'user'
+                  ? 'bg-blue-600 text-white rounded-tr-sm'
+                  : 'bg-gray-800 text-gray-100 border border-gray-700 rounded-tl-sm'
+                  }`}>
+                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                </div>
+
+                {/* Sources for Assistant Messages */}
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50 text-sm max-w-full">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Sources</p>
+                    <div className="space-y-2">
+                      {msg.sources.map((source, sIdx) => (
+                        <div key={sIdx} className="flex items-start gap-2 text-gray-300 bg-gray-900/50 p-2 rounded">
+                          <div className="w-1 h-full min-h-3 bg-blue-500 rounded-full shrink-0 mt-1" />
+                          <div>
+                            <p className="font-medium text-blue-400 text-xs">{source.filename}</p>
+                            <p className="text-xs text-gray-500 line-clamp-2">{source.chunk_content}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+
+        {loading && (
+          <div className="flex gap-4">
+            <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center shrink-0">
+              <Bot className="w-5 h-5 text-white" />
+            </div>
+            <div className="bg-gray-800 rounded-2xl rounded-tl-sm px-6 py-4 border border-gray-700 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+              <span className="text-gray-400 text-sm">Thinking...</span>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Area */}
+      <div className="p-6 bg-gray-900 border-t border-gray-800">
+        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative">
           <input
             type="text"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ask a question about your documents..."
-            className="flex-1 rounded-lg border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-400 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Ask anything about your documents..."
+            className="w-full bg-gray-800 text-gray-100 rounded-2xl pl-6 pr-14 py-4 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 placeholder-gray-500 shadow-lg"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !question.trim()}
-            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors"
           >
-            {loading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
+            <Send className="w-5 h-5" />
           </button>
-        </div>
-      </form>
-
-      {error && (
-        <div className="rounded-lg bg-red-900/50 border border-red-700 p-4 mb-6">
-          <p className="text-sm text-red-200">{error}</p>
-        </div>
-      )}
-
-      {response && (
-        <div className="space-y-4">
-          <div className="rounded-lg bg-gray-800 p-6 shadow-lg border border-gray-700">
-            <h3 className="text-sm font-medium text-gray-400 mb-2">Question</h3>
-            <p className="text-gray-200">{question}</p>
-          </div>
-
-          <div className="rounded-lg bg-blue-900/30 p-6 shadow-lg border border-blue-700">
-            <h3 className="text-sm font-medium text-blue-300 mb-2">Answer</h3>
-            <p className="text-gray-200 whitespace-pre-wrap">{response.answer}</p>
-          </div>
-
-          {response.sources.length > 0 && (
-            <div className="rounded-lg bg-gray-800 p-6 shadow-lg border border-gray-700">
-              <h3 className="text-sm font-medium text-gray-300 mb-3">Sources</h3>
-              <div className="space-y-3">
-                {response.sources.map((source, idx) => (
-                  <div key={idx} className="border-l-4 border-blue-500 pl-4 bg-gray-700/50 p-3 rounded">
-                    <p className="text-sm font-medium text-gray-200">{source.filename}</p>
-                    <p className="text-xs text-gray-400 mt-1">{source.chunk_content}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Relevance: {(source.relevance_score * 100).toFixed(1)}%
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+        </form>
+        <p className="text-center text-xs text-gray-600 mt-3">
+          AI can make mistakes. Please verify important information.
+        </p>
+      </div>
     </div>
   )
 }
