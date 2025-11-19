@@ -36,11 +36,12 @@ export async function uploadDocument(formData: FormData) {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.ms-excel',
-    'text/plain'
+    'text/plain',
+    'text/csv'
   ]
 
   if (!allowedTypes.includes(file.type)) {
-    return { error: 'Invalid file type. Supported: PDF, DOCX, XLSX, TXT' }
+    return { error: 'Invalid file type. Supported: PDF, DOCX, XLSX, XLS, CSV, TXT' }
   }
 
   try {

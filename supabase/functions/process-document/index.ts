@@ -57,9 +57,9 @@ serve(async (req: Request) => {
       const result = await mammoth.extractRawText({ buffer: new Uint8Array(buffer) })
       text = result.value
       console.log(`✅ Extracted ${text.length} characters from DOCX`)
-    } else if (fileType?.includes('text') || fileType?.includes('plain')) {
+    } else if (fileType?.includes('text') || fileType?.includes('plain') || fileType?.includes('csv')) {
       text = new TextDecoder().decode(buffer)
-      console.log(`✅ Read ${text.length} characters from text file`)
+      console.log(`✅ Read ${text.length} characters from text/CSV file`)
     } else if (fileType?.includes('spreadsheet') || fileType?.includes('sheet') || fileType?.includes('excel')) {
       // Parse Excel files using XLSX library
       try {
@@ -212,28 +212,86 @@ serve(async (req: Request) => {
   }
 })
 
-// Helper function to chunk text
+// Helper function to intelligently chunk text
 function chunkText(text: string, maxChunkSize = 1000, overlap = 200): string[] {
   const chunks: string[] = []
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text]
+  
+  // For CSV/spreadsheet data, split by line breaks first for better semantic chunks
+  const isSpreadsheetData = text.includes('=== Sheet:')
+  
+  let textToChunk = text
+  
+  // First, try to split by sentences for prose
+  let parts: string[] = []
+  
+  if (isSpreadsheetData) {
+    // For spreadsheets, split by "Sheet:" headers or newlines
+    parts = text.split(/(?:=== Sheet:|(?<=\n)(?=[^\n]))/g).filter(p => p.trim().length > 0)
+  } else {
+    // For regular text/PDFs, split by sentences
+    parts = text.match(/[^.!?\n]+[.!?\n]+/g) || [text]
+  }
   
   let currentChunk = ''
   
-  for (const sentence of sentences) {
-    if ((currentChunk + sentence).length > maxChunkSize && currentChunk.length > 0) {
+  for (const part of parts) {
+    const trimmedPart = part.trim()
+    if (!trimmedPart) continue
+    
+    // If this part alone is larger than maxChunkSize, split it further
+    if (trimmedPart.length > maxChunkSize) {
+      // Save current chunk if it has content
+      if (currentChunk.trim().length > 0) {
+        chunks.push(currentChunk.trim())
+      }
+      
+      // Split large part into smaller pieces
+      const largeChunks = splitLargeText(trimmedPart, maxChunkSize)
+      chunks.push(...largeChunks)
+      currentChunk = ''
+    } else if ((currentChunk + ' ' + trimmedPart).length > maxChunkSize && currentChunk.length > 0) {
+      // Current chunk would exceed size, save it
       chunks.push(currentChunk.trim())
       
-      // Add overlap by taking last few words
-      const words = currentChunk.split(' ')
+      // Add overlap for context continuity
+      const words = currentChunk.split(/\s+/)
       const overlapWords = words.slice(-Math.floor(overlap / 5))
-      currentChunk = overlapWords.join(' ') + ' ' + sentence
+      currentChunk = overlapWords.join(' ') + ' ' + trimmedPart
     } else {
-      currentChunk += sentence
+      // Add to current chunk
+      currentChunk += (currentChunk ? ' ' : '') + trimmedPart
     }
   }
   
+  // Don't forget the last chunk
   if (currentChunk.trim().length > 0) {
     chunks.push(currentChunk.trim())
+  }
+  
+  return chunks.filter(c => c.length > 0)
+}
+
+// Helper to split very large text blocks
+function splitLargeText(text: string, maxSize: number): string[] {
+  const chunks: string[] = []
+  let start = 0
+  
+  while (start < text.length) {
+    let end = start + maxSize
+    
+    // Try to break at a newline or space for better semantics
+    if (end < text.length) {
+      const lastNewline = text.lastIndexOf('\n', end)
+      const lastSpace = text.lastIndexOf(' ', end)
+      const breakPoint = Math.max(lastNewline, lastSpace)
+      
+      if (breakPoint > start + 100) { // Only use if we're not too close to start
+        end = breakPoint
+      }
+    }
+    
+    chunks.push(text.substring(start, end).trim())
+    start = end
   }
   
   return chunks
