@@ -61,25 +61,62 @@ serve(async (req: Request) => {
       text = new TextDecoder().decode(buffer)
       console.log(`✅ Read ${text.length} characters from text/CSV file`)
     } else if (fileType?.includes('spreadsheet') || fileType?.includes('sheet') || fileType?.includes('excel')) {
-      // Parse Excel files using XLSX library
+      // Parse Excel files as STRUCTURED DATA (inspired by Pandas DataFrame approach)
       try {
         const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' })
         let excelText = ''
 
-        // Process all sheets
+        // Process all sheets with structured data extraction
         for (const sheetName of workbook.SheetNames) {
           const worksheet = workbook.Sheets[sheetName]
-          // Convert sheet to CSV format first (better for text extraction)
-          const csv = XLSX.utils.sheet_to_csv(worksheet)
-          excelText += `\n\n=== Sheet: ${sheetName} ===\n${csv}`
+          
+          // Convert sheet to JSON to preserve structure (like Pandas DataFrame)
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+            header: 1, // Keep as array of arrays
+            defval: '', // Default empty cells to empty string
+            blankrows: false // Skip blank rows
+          })
+
+          if (!jsonData || jsonData.length === 0) {
+            console.warn(`Sheet "${sheetName}" is empty, skipping...`)
+            continue
+          }
+
+          // Build structured text representation
+          excelText += `\n\n=== SHEET: ${sheetName} ===\n`
+          
+          // Get headers (first row)
+          const headers = jsonData[0] as any[]
+          if (!headers || headers.length === 0) {
+            console.warn(`Sheet "${sheetName}" has no headers, skipping...`)
+            continue
+          }
+
+          excelText += `COLUMNS: ${headers.join(' | ')}\n`
+          excelText += `${'='.repeat(80)}\n`
+
+          // Process data rows (skip header row)
+          for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i] as any[]
+            
+            // Create row text with column labels for better semantic understanding
+            const rowParts: string[] = []
+            for (let j = 0; j < headers.length; j++) {
+              const header = headers[j]
+              const value = row[j] !== undefined && row[j] !== null ? row[j] : ''
+              rowParts.push(`${header}: ${value}`)
+            }
+            
+            excelText += `ROW ${i}: ${rowParts.join(', ')}\n`
+          }
         }
 
         if (excelText.trim().length === 0) {
-          throw new Error('No content found in Excel file')
+          throw new Error('No content found in Excel file - all sheets are empty')
         }
 
         text = excelText
-        console.log(`✅ Extracted ${text.length} characters from Excel file (${workbook.SheetNames.length} sheet(s))`)
+        console.log(`✅ Extracted ${text.length} characters from Excel file (${workbook.SheetNames.length} sheet(s) with structured data)`)
       } catch (excelError) {
         console.error('Excel parsing error:', excelError)
         throw new Error('Failed to parse Excel file. Please ensure it contains readable data.')
@@ -213,24 +250,80 @@ serve(async (req: Request) => {
 })
 
 // Helper function to intelligently chunk text
+// Implements semantic chunking for spreadsheets (inspired by P&G case study)
 function chunkText(text: string, maxChunkSize = 1000, overlap = 200): string[] {
   const chunks: string[] = []
   
-  // For CSV/spreadsheet data, split by line breaks first for better semantic chunks
-  const isSpreadsheetData = text.includes('=== Sheet:')
-  
-  let textToChunk = text
-  
-  // First, try to split by sentences for prose
-  let parts: string[] = []
+  // Detect if this is spreadsheet data
+  const isSpreadsheetData = text.includes('=== SHEET:')
   
   if (isSpreadsheetData) {
-    // For spreadsheets, split by "Sheet:" headers or newlines
-    parts = text.split(/(?:=== Sheet:|(?<=\n)(?=[^\n]))/g).filter(p => p.trim().length > 0)
-  } else {
-    // For regular text/PDFs, split by sentences
-    parts = text.match(/[^.!?\n]+[.!?\n]+/g) || [text]
+    // SPREADSHEET-SPECIFIC CHUNKING STRATEGY
+    // Split by sheets first, then chunk each sheet intelligently
+    const sheetSections = text.split(/(?==== SHEET:)/g).filter(s => s.trim().length > 0)
+    
+    for (const section of sheetSections) {
+      const lines = section.split('\n').filter(l => l.trim().length > 0)
+      
+      // Extract sheet header and column info
+      let sheetHeader = ''
+      let columnInfo = ''
+      let dataStartIndex = 0
+      
+      for (let i = 0; i < Math.min(lines.length, 5); i++) {
+        if (lines[i].includes('=== SHEET:')) {
+          sheetHeader = lines[i]
+          dataStartIndex = i + 1
+        } else if (lines[i].includes('COLUMNS:')) {
+          columnInfo = lines[i]
+          dataStartIndex = Math.max(dataStartIndex, i + 1)
+        } else if (lines[i].includes('===')) {
+          dataStartIndex = Math.max(dataStartIndex, i + 1)
+        }
+      }
+      
+      // Skip past separator lines
+      while (dataStartIndex < lines.length && lines[dataStartIndex].trim().match(/^=+$/)) {
+        dataStartIndex++
+      }
+      
+      // Chunk the data rows, keeping headers with each chunk
+      const dataLines = lines.slice(dataStartIndex)
+      let currentChunk = sheetHeader + '\n' + columnInfo + '\n'
+      let rowCount = 0
+      
+      for (const line of dataLines) {
+        if (line.startsWith('ROW')) {
+          // If adding this row exceeds max size, save current chunk
+          if (currentChunk.length + line.length > maxChunkSize && rowCount > 0) {
+            chunks.push(currentChunk.trim())
+            // Start new chunk with headers
+            currentChunk = sheetHeader + '\n' + columnInfo + '\n' + line + '\n'
+            rowCount = 1
+          } else {
+            currentChunk += line + '\n'
+            rowCount++
+          }
+        } else {
+          currentChunk += line + '\n'
+        }
+      }
+      
+      // Save last chunk for this sheet
+      if (currentChunk.trim().length > sheetHeader.length + columnInfo.length) {
+        chunks.push(currentChunk.trim())
+      }
+    }
+    
+    return chunks.filter(c => c.length > 0)
   }
+  
+  // REGULAR TEXT/PDF CHUNKING STRATEGY
+  // For non-spreadsheet data, split by sentences for prose
+  let parts: string[] = []
+  
+  // For regular text/PDFs, split by sentences
+  parts = text.match(/[^.!?\n]+[.!?\n]+/g) || [text]
   
   let currentChunk = ''
   
