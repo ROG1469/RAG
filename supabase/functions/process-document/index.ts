@@ -6,6 +6,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { default as pdfParse } from 'npm:pdf-parse@1.1.1'
 import mammoth from 'npm:mammoth@1.8.0'
+import * as XLSX from 'npm:xlsx@0.18.5'
 import { GoogleGenerativeAI } from 'npm:@google/generative-ai@0.24.1'
 
 console.log('✅ process-document Edge Function initialized')
@@ -60,32 +61,28 @@ serve(async (req: Request) => {
       text = new TextDecoder().decode(buffer)
       console.log(`✅ Read ${text.length} characters from text file`)
     } else if (fileType?.includes('spreadsheet') || fileType?.includes('sheet') || fileType?.includes('excel')) {
-      // Parse Excel files - extract text from XML content
+      // Parse Excel files using XLSX library
       try {
-        // XLSX is a ZIP file, we'll extract text by looking for common patterns
-        const uint8Array = new Uint8Array(buffer)
-        const decoder = new TextDecoder('utf-8', { fatal: false })
-        const rawText = decoder.decode(uint8Array)
-        
-        // Extract text between XML tags (cells contain values in <v> tags)
-        // Also try to extract from sheet data
-        const textMatches = rawText.match(/<v[^>]*>[^<]*<\/v>/gi) || []
-        const extractedValues = textMatches.map(match => 
-          match.replace(/<[^>]*>/g, '').trim()
-        ).filter(v => v.length > 0)
-        
-        // If we got values from XML, use them; otherwise use raw decoded text
-        if (extractedValues.length > 0) {
-          text = extractedValues.join(' ')
-          console.log(`✅ Extracted ${extractedValues.length} cell values from Excel file`)
-        } else {
-          // Fallback: use raw text and filter out non-printable characters
-          text = rawText.replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim()
-          console.log(`✅ Extracted ${text.length} characters from Excel file (fallback)`)
+        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' })
+        let excelText = ''
+
+        // Process all sheets
+        for (const sheetName of workbook.SheetNames) {
+          const worksheet = workbook.Sheets[sheetName]
+          // Convert sheet to CSV format first (better for text extraction)
+          const csv = XLSX.utils.sheet_to_csv(worksheet)
+          excelText += `\n\n=== Sheet: ${sheetName} ===\n${csv}`
         }
+
+        if (excelText.trim().length === 0) {
+          throw new Error('No content found in Excel file')
+        }
+
+        text = excelText
+        console.log(`✅ Extracted ${text.length} characters from Excel file (${workbook.SheetNames.length} sheet(s))`)
       } catch (excelError) {
         console.error('Excel parsing error:', excelError)
-        throw new Error('Failed to parse Excel file. Please ensure it contains readable text.')
+        throw new Error('Failed to parse Excel file. Please ensure it contains readable data.')
       }
     } else {
       throw new Error(`Unsupported file type: ${fileType}`)
